@@ -1,7 +1,6 @@
 /**
  * ============================================================
- * VOICE-TO-BILL POS — Backend Server (Local Whisper Version)
- * Stack : Node.js + Local Faster-Whisper + Google Gemini
+ * VOICE-TO-BILL POS — Backend Server (Fixed & Final)
  * ============================================================
  */
 
@@ -12,9 +11,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import cors from "cors";
-import { spawn } from "child_process"; // Python script-ah run panna ithu venum
+import { spawn } from "child_process";
 
-// ─── ESM __dirname shim ───────────────────────────────────────
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -22,81 +20,47 @@ const __dirname = path.dirname(__filename);
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "AIzaSyAFwM7K4GdQBKpiy4f0p6c-xFF917BcT6U";
 const PORT = process.env.PORT || 3000;
 
-// ─── SDK Initialisation ───────────────────────────────────────
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-// ─── Express App ──────────────────────────────────────────────
+const geminiModel = genAI.getGenerativeModel({ 
+    model: "gemini-1.5-flash"
+}, { apiVersion: 'v1' });
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ─── Local Whisper Transcription Function ───────────────────
-/**
- * Intha function unga transcribe.py script-ah call panni 
- * audio-va text-ah mathi tharum.
- */
+// ─── Local Whisper Function (UTF-8 Fixed) ─────────────────────
 const getLocalTranscription = (filePath) => {
   return new Promise((resolve, reject) => {
-    // Unga system-la 'python' nu type panna work aagalana 'python3' nu mathunga
-    const pythonProcess = spawn('python', ["transcribe.py", filePath]);
+    const pythonProcess = spawn('python', ["transcribe.py", filePath], {
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8' }
+    });
 
     let result = "";
     let error = "";
 
-    pythonProcess.stdout.on('data', (data) => {
-      result += data.toString();
-    });
-
-    pythonProcess.stderr.on('data', (data) => {
-      error += data.toString();
-    });
+    pythonProcess.stdout.on('data', (data) => { result += data.toString('utf8'); });
+    pythonProcess.stderr.on('data', (data) => { error += data.toString('utf8'); });
 
     pythonProcess.on('close', (code) => {
-      if (code === 0) {
-        resolve(result.trim());
-      } else {
-        console.error("Whisper Error:", error);
-        reject("Local Whisper failed to process audio.");
-      }
+      if (code === 0) resolve(result.trim());
+      else reject(error || "Local Whisper failed.");
     });
   });
 };
 
-// ─── Multer: audio upload to /tmp ────────────────────────────
-const upload = multer({
-  dest: path.join(__dirname, "tmp"),
-  limits: { fileSize: 25 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const allowed = ["audio/m4a", "audio/wav", "audio/mpeg", "audio/webm", "audio/mp4", "audio/ogg", "audio/x-m4a"];
-    if (allowed.includes(file.mimetype) || file.originalname.match(/\.(m4a|wav|mp3|webm|ogg)$/i)) {
-      cb(null, true);
-    } else {
-      cb(new Error("Unsupported audio format. Use m4a, wav, mp3, or webm."));
-    }
-  },
-});
+const upload = multer({ dest: path.join(__dirname, "tmp") });
 
 // ─── INVENTORY ────────────────────────────────────────────────
 const INVENTORY = [
-  { id: 1,  name: "Tea",           price: 12,  aliases: ["chai", "tae", "te", "chaa", "cha"] },
-  { id: 2,  name: "Coffee",        price: 20,  aliases: ["kaapi", "kopi", "coffe", "cofee", "kape"] },
-  { id: 3,  name: "Samosa",        price: 15,  aliases: ["samusa", "samosa", "samoosa", "chamosa", "samose"] },
-  { id: 4,  name: "Vada",          price: 10,  aliases: ["vada", "wada", "vadai", "medhu vada"] },
-  { id: 5,  name: "Idli",          price: 8,   aliases: ["idly", "idli", "iddli", "ittly"] },
-  { id: 6,  name: "Dosa",          price: 30,  aliases: ["dosai", "dosa", "dhosa", "tosa"] },
-  { id: 7,  name: "Pongal",        price: 25,  aliases: ["pongal", "pongall", "khara pongal"] },
-  { id: 8,  name: "Bajji",         price: 10,  aliases: ["bajji", "bhaji", "pakoda", "pakora", "bajjji"] },
-  { id: 9,  name: "Parotta",       price: 20,  aliases: ["parotta", "parota", "porotta", "parotha"] },
-  { id: 10, name: "Lassi",         price: 25,  aliases: ["lassi", "lasi", "lassie"] },
-  { id: 11, name: "Juice",         price: 30,  aliases: ["juice", "joos", "jos"] },
-  { id: 12, name: "Water Bottle",  price: 20,  aliases: ["water", "paani", "thanni", "waterbottle", "mineral water"] },
-  { id: 13, name: "Biscuit",       price: 5,   aliases: ["biscuit", "biskit", "biscuits", "biscuite"] },
-  { id: 14, name: "Bread",         price: 35,  aliases: ["bread", "bred", "pav", "pavv"] },
-  { id: 15, name: "Egg",           price: 7,   aliases: ["egg", "muttai", "eggs", "egge"] },
+  { id: 1,  name: "Tea",           price: 12,  aliases: ["chai", "tae", "te", "chaa", "cha", "டீ", "தீ"] },
+  { id: 2,  name: "Coffee",        price: 20,  aliases: ["kaapi", "kopi", "coffe", "cofee", "kape", "காபி"] },
+  { id: 3,  name: "Samosa",        price: 15,  aliases: ["samusa", "samosa", "samoosa", "chamosa", "samose", "சமோசா"] },
+  { id: 4,  name: "Vada",          price: 10,  aliases: ["vada", "wada", "vadai", "medhu vada", "வடை"] },
+  { id: 5,  name: "Idli",          price: 8,   aliases: ["idly", "idli", "iddli", "ittly", "இட்லி"] },
+  { id: 15, name: "Egg",           price: 7,   aliases: ["egg", "muttai", "eggs", "egge", "முட்டை"] },
 ];
 
-// ─── FUZZY MATCHING ENGINE ────────────────────────────────────
+// ─── FUZZY MATCHING ───────────────────────────────────────────
 function levenshtein(a, b) {
   const m = a.length, n = b.length;
   const dp = Array.from({ length: m + 1 }, (_, i) => Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
@@ -108,119 +72,91 @@ function levenshtein(a, b) {
   return dp[m][n];
 }
 
-function similarity(a, b) {
-  const dist = levenshtein(a.toLowerCase(), b.toLowerCase());
-  return 1 - dist / Math.max(a.length, b.length);
-}
-
-const FUZZY_THRESHOLD = 0.60;
-
 function fuzzyMatch(rawName) {
   const query = rawName.toLowerCase().trim();
-  let bestItem = null;
-  let bestScore = 0;
-
+  let bestItem = null, bestScore = 0;
   for (const item of INVENTORY) {
-    const candidates = [item.name, ...item.aliases];
-    for (const candidate of candidates) {
+    for (const candidate of [item.name, ...item.aliases]) {
       const c = candidate.toLowerCase();
-      if (c === query) return { item, score: 1.0 };
-      const subScore = (c.includes(query) || query.includes(c)) ? 0.9 : 0;
-      const levScore = similarity(query, c);
-      const finalScore = Math.max(subScore, levScore);
-      if (finalScore > bestScore) {
-        bestScore = finalScore;
-        bestItem = item;
-      }
+      const score = 1 - levenshtein(query, c) / Math.max(query.length, c.length);
+      if (score > bestScore) { bestScore = score; bestItem = item; }
     }
   }
-  return bestScore >= FUZZY_THRESHOLD ? { item: bestItem, score: bestScore } : null;
+  return bestScore >= 0.6 ? { item: bestItem } : null;
 }
 
-// ─── GEMINI SYSTEM PROMPT ─────────────────────────────────────
-const GEMINI_SYSTEM_PROMPT = `Extract items and quantities from Tanglish. Tamil numbers: Onnu=1, Rendu=2, Moonu=3, Naalu=4, Anju=5. Return JSON array: [{"name":"Item","quantity":X}]`;
+// ─── SYSTEM PROMPT (Tamil/Tanglish Mapping) ───────────────────
+const GEMINI_SYSTEM_PROMPT = `
+Extract items and quantities from the text. 
+Input can be English, Tanglish, or Tamil Script.
+Inventory: ${JSON.stringify(INVENTORY.map(i => i.name))}
 
-// ─── CORE ROUTE: /process-voice ──────────────────────────────
+Tamil Numbers: Onnu/Ondru=1, Rendu/Irandu=2, Moonu=3, Naalu=4, Anju=5.
+
+TASK:
+1. Identify item and quantity.
+2. Return ONLY a JSON array: [{"name":"English_Item_Name", "quantity": X}]
+3. If Tamil script is used (e.g., 'தீ'), map it to English (e.g., 'Tea').
+`;
+
+// ─── CORE ROUTE ──────────────────────────────────────────────
 app.post("/process-voice", upload.single("audio"), async (req, res) => {
   const tmpFilePath = req.file?.path;
+  if (!req.file) return res.status(400).json({ success: false, error: "No audio file" });
 
   try {
-    if (!req.file) return res.status(400).json({ success: false, error: "No audio file uploaded." });
-
-    const ext = path.extname(req.file.originalname) || ".m4a";
-    const namedPath = `${tmpFilePath}${ext}`;
+    const namedPath = `${tmpFilePath}.m4a`;
     fs.renameSync(tmpFilePath, namedPath);
 
-    // ── Step 2: LOCAL WHISPER (No API Cost!) ───────────────
     console.log("[2/4] Running Local Faster-Whisper...");
     const rawText = await getLocalTranscription(namedPath);
     console.log(`[2/4] Whisper Output: "${rawText}"`);
 
-    if (!rawText) {
-      if (fs.existsSync(namedPath)) fs.unlinkSync(namedPath);
-      return res.status(200).json({ success: false, error: "Empty transcription.", transcript: "", items: [], total: 0 });
+    if (!rawText || rawText.toLowerCase().includes("you")) {
+       if (fs.existsSync(namedPath)) fs.unlinkSync(namedPath);
+       return res.json({ success: false, error: "Try speaking again.", transcript: rawText, items: [] });
     }
 
-    // ── Step 3: Gemini entity extraction ───────────────────
     console.log("[3/4] Sending to Gemini...");
-    const geminiResponse = await geminiModel.generateContent(`${GEMINI_SYSTEM_PROMPT}\n\nOrder text: "${rawText}"`);
+    const geminiResponse = await geminiModel.generateContent(`${GEMINI_SYSTEM_PROMPT}\n\nOrder: "${rawText}"`);
     const geminiText = geminiResponse.response.text().trim();
-    
+    console.log("[3/4] Gemini Raw:", geminiText);
+
     let extractedItems = [];
     try {
       const cleaned = geminiText.replace(/```json|```/g, "").trim();
       extractedItems = JSON.parse(cleaned);
-    } catch (parseErr) {
-      return res.status(200).json({ success: false, error: "AI parse failed", transcript: rawText, items: [] });
-    }
+    } catch (e) { extractedItems = []; }
 
-    // ── Step 4: Fuzzy match + build bill ───────────────────
     const billItems = [];
-    for (const extracted of extractedItems) {
-      const qty = Math.max(1, parseInt(extracted.quantity) || 1);
-      const match = fuzzyMatch(extracted.name);
-
+    for (const ext of extractedItems) {
+      const match = fuzzyMatch(ext.name);
       if (match) {
-        const existing = billItems.find((b) => b.id === match.item.id);
-        if (existing) {
-          existing.quantity += qty;
-          existing.subtotal = existing.quantity * existing.unitPrice;
-        } else {
-          billItems.push({
-            id: match.item.id,
-            name: match.item.name,
-            quantity: qty,
-            unitPrice: match.item.price,
-            subtotal: qty * match.item.price,
-          });
-        }
+        billItems.push({
+          id: match.item.id,
+          name: match.item.name,
+          quantity: parseInt(ext.quantity) || 1,
+          unitPrice: match.item.price,
+          subtotal: (parseInt(ext.quantity) || 1) * match.item.price,
+        });
       }
     }
 
-    const grandTotal = billItems.reduce((sum, i) => sum + i.subtotal, 0);
+    const total = billItems.reduce((sum, i) => sum + i.subtotal, 0);
     if (fs.existsSync(namedPath)) fs.unlinkSync(namedPath);
 
-    return res.status(200).json({ success: true, transcript: rawText, items: billItems, total: grandTotal });
+    console.log(`[4/4] Final Bill: ₹${total}`);
+    return res.json({ success: true, transcript: rawText, items: billItems, total: total });
 
   } catch (err) {
-    if (tmpFilePath && fs.existsSync(tmpFilePath)) fs.unlinkSync(tmpFilePath);
+    console.error(err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
-// ─── Health Check ─────────────────────────────────────────────
-app.get("/health", (_req, res) => {
-  res.json({ 
-    status: "ok", 
-    inventory_count: INVENTORY.length, 
-    uptime: process.uptime() 
-  });
-});
 
-// ─── Inventory List (Flutter-kaga) ───────────────────────────
-app.get("/inventory", (_req, res) => {
-  res.json({ 
-    success: true, 
-    items: INVENTORY 
-  });
+app.get("/inventory", (req, res) => res.json({ success: true, items: INVENTORY }));
+
+// 🔧 CRITICAL: Change 127.0.0.1 to 0.0.0.0 for mobile access
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running on http://192.168.1.7:${PORT}`);
 });
-app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
